@@ -1,0 +1,5 @@
+network:
+  public:
+    domain: aks-poc.ORG.com
+    ipName: ${ipName}
+    ip: ${ip}
