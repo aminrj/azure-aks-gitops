@@ -1,6 +1,7 @@
 locals {
-  infra_rg_name       = "aks-poc"
-  infra_nodes_rg_name = "aks-poc-nodes"
+  infra_rg_name                 = "aks-poc"
+  infra_nodes_rg_name           = "aks-poc-nodes"
+  infra_kubernetes_cluster_name = "aks-poc-lb"
 }
 
 provider "azurerm" {
@@ -21,11 +22,6 @@ terraform {
 data "azurerm_kubernetes_cluster" "main" {
   name                = var.kubernetes_cluster_name
   resource_group_name = local.infra_rg_name
-}
-
-data "azurerm_public_ip" "public_lb" {
-  name                = "aks-poc-lb"
-  resource_group_name = local.infra_nodes_rg_name
 }
 
 provider "kubernetes" {
@@ -114,24 +110,14 @@ resource "kubectl_manifest" "argocd_bootstrap" {
     }
 
     spec = {
-      project = "default" 
+      project = "default"
       destination = {
         namespace = "argocd"
         name      = "in-cluster"
       }
       source = {
         repoURL = "git@github.com:aminrj/azure-aks-gitops.git"
-        helm = {
-          values = yamlencode({
-            network = {
-              public = {
-                domain = "aks-poc.molntek.com"
-                ipName = data.azurerm_public_ip.public_lb.name
-                ip     = data.azurerm_public_ip.public_lb.ip_address
-              }
-            }
-          })
-        }
+        path: "apps"
       }
     }
   })
