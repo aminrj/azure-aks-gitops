@@ -118,6 +118,7 @@ resource "kubectl_manifest" "argocd_bootstrap" {
       source = {
         repoURL = "git@github.com:aminrj/azure-aks-gitops.git"
         path: "apps"
+        revision: "HEAD"
       }
     }
   })
