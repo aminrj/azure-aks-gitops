@@ -1,7 +1,7 @@
 locals {
   infra_rg_name                 = "aks-poc"
   infra_nodes_rg_name           = "aks-poc-nodes"
-  infra_kubernetes_cluster_name = "aks-poc-lb"
+  infra_kubernetes_cluster_name = "my-aks-cluster"
 }
 
 provider "azurerm" {
@@ -20,14 +20,14 @@ terraform {
 }
 
 data "azurerm_kubernetes_cluster" "main" {
-  name                = var.kubernetes_cluster_name
+  name                = local.infra_kubernetes_cluster_name
   resource_group_name = local.infra_rg_name
 }
 
 provider "kubernetes" {
   host                   = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.host
-  username               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.username
-  password               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.password
+  # username               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.username
+  # password               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.password
   client_certificate     = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.client_certificate)
   client_key             = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.client_key)
   cluster_ca_certificate = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.cluster_ca_certificate)
@@ -76,8 +76,8 @@ resource "kubernetes_secret" "argocd_repo_credentials" {
   }
   type = "Opaque"
   data = {
-    url           = "git@github.com:ORG"
-    sshPrivateKey = file("./files/githubSSHPrivateKey.key")
+    url           = "git@github.com:aminrj/azure-aks-gitops.git"
+    sshPrivateKey = file("./files/githubSSHPrivateKey.key") # TODO: change this to your own private key
   }
 }
 
@@ -86,7 +86,7 @@ resource "helm_release" "argocd" {
   namespace  = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
-  version    = "5.46.7"
+  version    = "5.51.6"
   skip_crds  = true
   depends_on = [
     kubernetes_secret.argocd_repo_credentials,
@@ -117,8 +117,8 @@ resource "kubectl_manifest" "argocd_bootstrap" {
       }
       source = {
         repoURL = "git@github.com:aminrj/azure-aks-gitops.git"
-        path: "apps"
-        revision: "HEAD"
+        path : "apps"
+        revision : "HEAD"
       }
     }
   })

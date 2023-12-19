@@ -18,9 +18,9 @@ git clone <repository-url>
 2. `terraform init`
 3. `terraform plan`
 4. `terraform apply`
-5. Port-forward for dev/test:
-    `kubectl port-forward -n argocd svc/argocd-server 8080:80`
-6. Get the credentials for `admin` user :
+5. Get the credentials for `admin` user :
    ```bash
     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
    ```
+6. Port-forward for dev/test:
+    `kubectl port-forward -n argocd svc/argocd-server 8080:80`
