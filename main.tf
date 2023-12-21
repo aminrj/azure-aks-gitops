@@ -1,42 +1,47 @@
 locals {
-  infra_rg_name                 = "aks-poc"
-  infra_nodes_rg_name           = "aks-poc-nodes"
-  infra_kubernetes_cluster_name = "my-aks-cluster"
+  # infra_rg_name                 = "aks-poc"
+  # infra_nodes_rg_name           = "aks-poc-nodes"
+  # infra_kubernetes_cluster_name = "dev-aks-poc-cluster"
+  env                 = "dev"
+  resource_group_name = "aks-poc"
+  aks_name            = "aks-poc-cluster"
 }
 
-provider "azurerm" {
-  features {}
-}
+data "azurerm_kubernetes_cluster" "this" {
+  name                = "${local.env}-${local.aks_name}"
+  resource_group_name = local.resource_group_name
 
-terraform {
-  required_version = ">= 0.13"
-
-  required_providers {
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
-  }
-}
-
-data "azurerm_kubernetes_cluster" "main" {
-  name                = local.infra_kubernetes_cluster_name
-  resource_group_name = local.infra_rg_name
-}
-
-provider "kubernetes" {
-  host                   = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.host
-  # username               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.username
-  # password               = data.azurerm_kubernetes_cluster.main.kube_admin_config.0.password
-  client_certificate     = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.client_certificate)
-  client_key             = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.client_key)
-  cluster_ca_certificate = base64decode(data.azurerm_kubernetes_cluster.main.kube_admin_config.0.cluster_ca_certificate)
+  # Comment this out if you get: Error: Kubernetes cluster unreachable 
+  # depends_on = [azurerm_kubernetes_cluster.this]
 }
 
 provider "helm" {
   kubernetes {
-    config_path = "~/.kube/config"
+    host                   = data.azurerm_kubernetes_cluster.this.kube_config.0.host
+    client_certificate     = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.client_certificate)
+    client_key             = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.client_key)
+    cluster_ca_certificate = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.cluster_ca_certificate)
   }
+}
+
+# External nginx
+resource "helm_release" "external_nginx" {
+  name = "external"
+
+  repository       = "https://kubernetes.github.io/ingress-nginx"
+  chart            = "ingress-nginx"
+  namespace        = "ingress"
+  create_namespace = true
+  version          = "4.8.0"
+
+  values = [file("${path.module}/values/ingress.yaml")]
+}
+
+provider "kubernetes" {
+  host                   = data.azurerm_kubernetes_cluster.this.kube_config.0.host
+  client_certificate     = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.client_certificate)
+  client_key             = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.client_key)
+  cluster_ca_certificate = base64decode(data.azurerm_kubernetes_cluster.this.kube_config.0.cluster_ca_certificate)
 }
 
 # add special labels and annotations so git-ops tool will not try to remove it
@@ -56,7 +61,7 @@ locals {
 
 # Declare some resources, and the git-ops tool:
 resource "kubernetes_namespace" "argocd" {
-  depends_on = [data.azurerm_kubernetes_cluster.main]
+  depends_on = [data.azurerm_kubernetes_cluster.this]
 
   metadata {
     name = "argocd"
@@ -105,7 +110,7 @@ resource "kubectl_manifest" "argocd_bootstrap" {
     kind       = "Application"
 
     metadata = {
-      name      = "bootstrap-${var.kubernetes_cluster_name}"
+      name      = "bootstrap-${local.aks_name}"
       namespace = "argocd"
     }
 
@@ -122,5 +127,20 @@ resource "kubectl_manifest" "argocd_bootstrap" {
       }
     }
   })
-
 }
+
+
+# # Deploy nginx-ingress controller with Static IP
+# resource "azurerm_public_ip" "nginx_controller" {
+#   resource_group_name = data.azurerm_kubernetes_cluster.main.node_resource_group
+#   location            = data.azurerm_kubernetes_cluster.main.location
+
+#   name              = "nginx-controller"
+#   allocation_method = "Static"
+# }
+
+# module "nginx-controller" {
+#   source  = "terraform-iaac/nginx-controller/helm"
+
+#   ip_address = azurerm_public_ip.nginx_controller.ip_address
+# }
